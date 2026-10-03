@@ -137,6 +137,31 @@ const getApplicationsForJob = async (req, res) => {
     }
 };
 
+const VALID_STAGES = ['applied', 'reviewing', 'interview', 'offer', 'rejected'];
+
+const mapStageToStatus = (stage) => {
+    switch (stage) {
+        case 'interview': return 'shortlisted';
+        case 'offer': return 'hired';
+        case 'rejected': return 'rejected';
+        case 'applied':
+        case 'reviewing':
+        default:
+            return 'applied';
+    }
+};
+
+const mapStatusToStage = (status) => {
+    switch (status) {
+        case 'shortlisted': return 'interview';
+        case 'hired': return 'offer';
+        case 'rejected': return 'rejected';
+        case 'applied':
+        default:
+            return 'applied';
+    }
+};
+
 // D. Update Application Status — recruiter who owns the job only
 const updateApplicationStatus = async (req, res) => {
     try {
@@ -183,6 +208,15 @@ const updateApplicationStatus = async (req, res) => {
         }
 
         application.status = status;
+        // Keep stage in sync
+        application.stage = mapStatusToStage(status);
+        if (!application.stageHistory) application.stageHistory = [];
+        application.stageHistory.push({
+            stage: application.stage,
+            changedBy: req.user.name || 'Recruiter',
+            changedAt: new Date()
+        });
+
         await application.save();
 
         return res.status(200).json({
@@ -197,9 +231,171 @@ const updateApplicationStatus = async (req, res) => {
     }
 };
 
+// E. Update Application Stage (Kanban pipeline) — recruiter who owns the job only
+const updateApplicationStage = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { stage } = req.body;
+
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({
+                message: 'Invalid application ID format'
+            });
+        }
+
+        if (!stage || !VALID_STAGES.includes(stage)) {
+            return res.status(400).json({
+                message: `Invalid stage. Allowed values: ${VALID_STAGES.join(', ')}`
+            });
+        }
+
+        const application = await Application.findById(id).populate('job');
+
+        if (!application) {
+            return res.status(404).json({
+                message: 'Application not found'
+            });
+        }
+
+        if (!application.job) {
+            return res.status(404).json({
+                message: 'Associated job not found'
+            });
+        }
+
+        if (application.job.recruiter.toString() !== req.user._id.toString()) {
+            return res.status(403).json({
+                message: 'Access denied. You can only update applications for your own jobs.'
+            });
+        }
+
+        application.stage = stage;
+        // Keep backward-compatible status field in sync
+        application.status = mapStageToStatus(stage);
+
+        if (!application.stageHistory) application.stageHistory = [];
+        application.stageHistory.push({
+            stage,
+            changedBy: req.user.name || 'Recruiter',
+            changedAt: new Date()
+        });
+
+        await application.save();
+
+        return res.status(200).json({
+            message: 'Application stage updated successfully',
+            application
+        });
+    } catch (error) {
+        return res.status(500).json({
+            message: 'Server error while updating application stage',
+            error: error.message
+        });
+    }
+};
+
+// F. Add Internal Recruiter Note — recruiter only
+const addApplicationNote = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { text } = req.body;
+
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({
+                message: 'Invalid application ID format'
+            });
+        }
+
+        if (!text || !text.trim()) {
+            return res.status(400).json({
+                message: 'Note text cannot be empty'
+            });
+        }
+
+        const application = await Application.findById(id).populate('job');
+
+        if (!application) {
+            return res.status(404).json({
+                message: 'Application not found'
+            });
+        }
+
+        if (application.job.recruiter.toString() !== req.user._id.toString()) {
+            return res.status(403).json({
+                message: 'Access denied. You can only add notes to your own applicants.'
+            });
+        }
+
+        const newNote = {
+            author: req.user.name || 'Recruiter',
+            text: text.trim(),
+            createdAt: new Date()
+        };
+
+        if (!application.notes) application.notes = [];
+        application.notes.push(newNote);
+        await application.save();
+
+        return res.status(201).json({
+            message: 'Note added successfully',
+            notes: application.notes
+        });
+    } catch (error) {
+        return res.status(500).json({
+            message: 'Server error while adding note',
+            error: error.message
+        });
+    }
+};
+
+// G. Delete Internal Recruiter Note — recruiter only
+const deleteApplicationNote = async (req, res) => {
+    try {
+        const { id, noteId } = req.params;
+
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({
+                message: 'Invalid application ID format'
+            });
+        }
+
+        const application = await Application.findById(id).populate('job');
+
+        if (!application) {
+            return res.status(404).json({
+                message: 'Application not found'
+            });
+        }
+
+        if (application.job.recruiter.toString() !== req.user._id.toString()) {
+            return res.status(403).json({
+                message: 'Access denied. You can only manage notes on your own applicants.'
+            });
+        }
+
+        application.notes = (application.notes || []).filter(
+            (note) => note._id.toString() !== noteId
+        );
+        await application.save();
+
+        return res.status(200).json({
+            message: 'Note deleted successfully',
+            notes: application.notes
+        });
+    } catch (error) {
+        return res.status(500).json({
+            message: 'Server error while deleting note',
+            error: error.message
+        });
+    }
+};
+
 module.exports = {
     applyForJob,
     getMyApplications,
     getApplicationsForJob,
-    updateApplicationStatus
+    updateApplicationStatus,
+    updateApplicationStage,
+    addApplicationNote,
+    deleteApplicationNote
 };

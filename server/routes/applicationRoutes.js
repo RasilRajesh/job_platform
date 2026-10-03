@@ -7,7 +7,10 @@ const {
     applyForJob,
     getMyApplications,
     getApplicationsForJob,
-    updateApplicationStatus
+    updateApplicationStatus,
+    updateApplicationStage,
+    addApplicationNote,
+    deleteApplicationNote
 } = require('../controllers/applicationController.js');
 
 // Specific routes first — avoids Express treating "my-applications" as an ID
@@ -19,5 +22,8 @@ router.post('/:jobId', authmiddleware, jobseekerOnly, applyForJob);
 // Recruiter routes
 router.get('/job/:jobId', authmiddleware, recruiterOnly, getApplicationsForJob);
 router.put('/:id/status', authmiddleware, recruiterOnly, updateApplicationStatus);
+router.patch('/:id/stage', authmiddleware, recruiterOnly, updateApplicationStage);
+router.post('/:id/notes', authmiddleware, recruiterOnly, addApplicationNote);
+router.delete('/:id/notes/:noteId', authmiddleware, recruiterOnly, deleteApplicationNote);
 
 module.exports = router;

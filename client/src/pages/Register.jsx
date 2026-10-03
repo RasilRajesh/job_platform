@@ -1,9 +1,13 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
+import Button from '../components/ui/Button';
+import { UserPlus } from 'lucide-react';
 
 function Register() {
     const { register } = useAuth();
+    const { success, error: toastError } = useToast();
     const navigate = useNavigate();
     const [form, setForm] = useState({
         name: '',
@@ -11,7 +15,6 @@ function Register() {
         password: '',
         role: 'jobseeker'
     });
-    const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
 
     const handleChange = (event) => {
@@ -20,24 +23,24 @@ function Register() {
 
     const handleSubmit = async (event) => {
         event.preventDefault();
-        setError('');
 
         if (!form.name.trim() || !form.email.trim() || !form.password || !form.role) {
-            setError('Name, email, password, and role are required.');
+            toastError('Please fill out all required fields.');
             return;
         }
 
         if (form.password.length < 6) {
-            setError('Password should be at least 6 characters.');
+            toastError('Password must be at least 6 characters long.');
             return;
         }
 
         setLoading(true);
         try {
             const user = await register(form);
+            success(`Account created successfully! Welcome, ${user.name}`);
             navigate(user.role === 'recruiter' ? '/dashboard/recruiter' : '/dashboard/jobseeker');
         } catch (err) {
-            setError(err.message);
+            toastError(err.message || 'Registration failed');
         } finally {
             setLoading(false);
         }
@@ -46,32 +49,66 @@ function Register() {
     return (
         <div className="container auth-page">
             <form className="auth-card" onSubmit={handleSubmit}>
-                <h1>Create account</h1>
-                <p className="muted">Register as a job seeker or recruiter.</p>
-                {error && <div className="alert alert-error">{error}</div>}
+                <h1 style={{ fontSize: 26, marginBottom: 6 }}>Create an account</h1>
+                <p style={{ color: 'var(--text-muted)', fontSize: 14, marginBottom: 24 }}>
+                    Join HireHub to discover opportunities or recruit stellar talent.
+                </p>
+
                 <label>
-                    Name
-                    <input name="name" value={form.name} onChange={handleChange} required />
+                    <span>Full name</span>
+                    <input
+                        name="name"
+                        value={form.name}
+                        onChange={handleChange}
+                        placeholder="Alex Morgan"
+                        required
+                    />
                 </label>
+
                 <label>
-                    Email
-                    <input type="email" name="email" value={form.email} onChange={handleChange} required />
+                    <span>Email address</span>
+                    <input
+                        type="email"
+                        name="email"
+                        value={form.email}
+                        onChange={handleChange}
+                        placeholder="alex@example.com"
+                        required
+                    />
                 </label>
+
                 <label>
-                    Password
-                    <input type="password" name="password" value={form.password} onChange={handleChange} required />
+                    <span>Password (min. 6 characters)</span>
+                    <input
+                        type="password"
+                        name="password"
+                        value={form.password}
+                        onChange={handleChange}
+                        placeholder="••••••••"
+                        required
+                    />
                 </label>
+
                 <label>
-                    Role
+                    <span>I am joining as</span>
                     <select name="role" value={form.role} onChange={handleChange} required>
-                        <option value="jobseeker">Job Seeker</option>
-                        <option value="recruiter">Recruiter</option>
+                        <option value="jobseeker">Job Seeker (Looking for opportunities)</option>
+                        <option value="recruiter">Recruiter (Hiring for my company)</option>
                     </select>
                 </label>
-                <button type="submit" className="btn btn-primary" disabled={loading}>
-                    {loading ? 'Creating account...' : 'Register'}
-                </button>
-                <p className="muted">Already have an account? <Link to="/login">Login</Link></p>
+
+                <Button
+                    type="submit"
+                    loading={loading}
+                    icon={UserPlus}
+                    style={{ width: '100%', marginTop: 8 }}
+                >
+                    Create Account
+                </Button>
+
+                <p style={{ color: 'var(--text-muted)', fontSize: 14, textAlign: 'center', marginTop: 20 }}>
+                    Already have an account? <Link to="/login" style={{ fontWeight: 600 }}>Sign in</Link>
+                </p>
             </form>
         </div>
     );

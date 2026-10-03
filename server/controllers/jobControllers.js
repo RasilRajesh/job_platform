@@ -70,7 +70,9 @@ const getAllJobs = async (req, res) => {
         // req.query holds URL query parameters, e.g. ?search=developer&page=1
         const {
             search,
+            q,
             location,
+            remote,
             minSalary,
             maxSalary,
             skills,
@@ -80,12 +82,13 @@ const getAllJobs = async (req, res) => {
             limit
         } = req.query;
 
+        const searchTerm = search || q;
         const query = {};
 
         // --- SEARCH (case-insensitive across multiple fields) ---
-        if (search && search.trim()) {
+        if (searchTerm && searchTerm.trim()) {
             const searchRegex = {
-                $regex: escapeRegex(search.trim()),
+                $regex: escapeRegex(searchTerm.trim()),
                 $options: 'i' // 'i' = case-insensitive (developer === Developer)
             };
 
@@ -96,6 +99,20 @@ const getAllJobs = async (req, res) => {
                 { location: searchRegex },
                 { skills: searchRegex }
             ];
+        }
+
+        // --- FILTER BY REMOTE ---
+        if (remote === 'true' || remote === true) {
+            const remoteRegex = { $regex: 'remote', $options: 'i' };
+            if (query.$or) {
+                query.$and = [
+                    { $or: query.$or },
+                    { $or: [{ location: remoteRegex }, { description: remoteRegex }] }
+                ];
+                delete query.$or;
+            } else {
+                query.$or = [{ location: remoteRegex }, { description: remoteRegex }];
+            }
         }
 
         // --- FILTER BY LOCATION ---

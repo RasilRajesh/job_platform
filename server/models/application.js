@@ -30,7 +30,30 @@ const applicationSchema = new mongoose.Schema({
         type: String,
         enum: ['applied', 'shortlisted', 'rejected', 'hired'],
         default: 'applied'
-    }
+    },
+
+    stage: {
+        type: String,
+        enum: ['applied', 'reviewing', 'interview', 'offer', 'rejected'],
+        default: function () {
+            if (this.status === 'shortlisted') return 'interview';
+            if (this.status === 'hired') return 'offer';
+            if (this.status === 'rejected') return 'rejected';
+            return 'applied';
+        }
+    },
+
+    notes: [{
+        author: { type: String, required: true },
+        text: { type: String, required: true },
+        createdAt: { type: Date, default: Date.now }
+    }],
+
+    stageHistory: [{
+        stage: { type: String, required: true },
+        changedBy: { type: String },
+        changedAt: { type: Date, default: Date.now }
+    }]
 }, {
     timestamps: true
 });

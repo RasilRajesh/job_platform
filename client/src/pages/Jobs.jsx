@@ -1,63 +1,43 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useEffect, useState, useRef } from 'react';
 import { getJobs } from '../services/api';
 import JobCard from '../components/JobCard';
 import JobFilter from '../components/JobFilter';
-import Loading from '../components/Loading';
+import { JobCardSkeleton } from '../components/ui/Skeleton';
 import ErrorMessage from '../components/ErrorMessage';
-import EmptyState from '../components/EmptyState';
 import { useSavedMap } from '../hooks/useSavedMap';
-
-const emptyFilters = {
-    search: '',
-    location: '',
-    minSalary: '',
-    maxSalary: '',
-    skills: '',
-    jobType: '',
-    sort: 'latest'
-};
+import { useJobFilters } from '../hooks/useJobFilters';
+import { useAuth } from '../context/AuthContext';
+import { ChevronLeft, ChevronRight, Briefcase } from 'lucide-react';
 
 function Jobs() {
-    const [searchParams, setSearchParams] = useSearchParams();
-    const [filters, setFilters] = useState({
-        ...emptyFilters,
-        search: searchParams.get('search') || '',
-        location: searchParams.get('location') || '',
-        minSalary: searchParams.get('minSalary') || '',
-        maxSalary: searchParams.get('maxSalary') || '',
-        skills: searchParams.get('skills') || '',
-        jobType: searchParams.get('jobType') || '',
-        sort: searchParams.get('sort') || 'latest'
-    });
+    const { user } = useAuth();
+    const { filters, setFilter, clearAll, activeFilterChips, apiParams } = useJobFilters();
     const [jobs, setJobs] = useState([]);
     const [pagination, setPagination] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-    const page = Number(searchParams.get('page') || 1);
     const { savedMap, toggleSave, canSave } = useSavedMap(jobs);
-
-    const query = useMemo(() => ({
-        search: searchParams.get('search') || '',
-        location: searchParams.get('location') || '',
-        minSalary: searchParams.get('minSalary') || '',
-        maxSalary: searchParams.get('maxSalary') || '',
-        skills: searchParams.get('skills') || '',
-        jobType: searchParams.get('jobType') || '',
-        sort: searchParams.get('sort') || 'latest',
-        page,
-        limit: 6
-    }), [searchParams, page]);
+    const abortControllerRef = useRef(null);
 
     const loadJobs = async () => {
+        // Cancel previous pending request if any
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+        }
+        const controller = new AbortController();
+        abortControllerRef.current = controller;
+
         setLoading(true);
         setError('');
+
         try {
-            const data = await getJobs(query);
+            const data = await getJobs(apiParams);
             setJobs(data.jobs || []);
             setPagination(data.pagination || null);
         } catch (err) {
-            setError(err.message);
+            if (err.name !== 'AbortError') {
+                setError(err.message);
+            }
         } finally {
             setLoading(false);
         }
@@ -65,75 +45,115 @@ function Jobs() {
 
     useEffect(() => {
         loadJobs();
-    }, [searchParams]);
 
-    const applyFilters = (event) => {
-        event.preventDefault();
-        const next = { ...filters, page: 1 };
-        Object.keys(next).forEach((key) => {
-            if (!next[key]) delete next[key];
-        });
-        setSearchParams(next);
-    };
-
-    const resetFilters = () => {
-        setFilters(emptyFilters);
-        setSearchParams({});
-    };
+        return () => {
+            if (abortControllerRef.current) {
+                abortControllerRef.current.abort();
+            }
+        };
+    }, [JSON.stringify(apiParams)]);
 
     const goToPage = (nextPage) => {
-        const next = Object.fromEntries(searchParams.entries());
-        next.page = String(nextPage);
-        setSearchParams(next);
+        setFilter('page', nextPage);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
     return (
         <div className="container section">
-            <h1>Find jobs</h1>
-            <p className="muted">Search, filter, sort, and paginate using the backend jobs API.</p>
+            <div style={{ marginBottom: 28 }}>
+                <h1 style={{ marginBottom: 6 }}>Explore opportunities</h1>
+                <p style={{ color: 'var(--text-muted)', fontSize: 16 }}>
+                    Find the role that fits your ambitions. Live synced and filtered across verified openings.
+                </p>
+            </div>
+
             <JobFilter
                 filters={filters}
-                onChange={setFilters}
-                onSubmit={applyFilters}
-                onReset={resetFilters}
+                onFilterChange={setFilter}
+                onReset={clearAll}
+                activeChips={activeFilterChips}
             />
-            {loading && <Loading message="Loading jobs..." />}
-            {error && <ErrorMessage message={error} onRetry={loadJobs} />}
-            {!loading && !error && jobs.length === 0 && (
-                <EmptyState
-                    title="No jobs found"
-                    message="Try changing your search filters."
-                />
-            )}
-            <div className="job-grid">
-                {jobs.map((job) => (
-                    <JobCard
-                        key={job._id}
-                        job={job}
-                        showSave={canSave}
-                        saved={savedMap[job._id]}
-                        onToggleSave={toggleSave}
-                    />
-                ))}
+
+            {/* Results count strip */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-muted)' }}>
+                    {loading ? (
+                        'Searching open roles...'
+                    ) : (
+                        `Showing ${jobs.length} of ${pagination?.totalJobs || jobs.length} positions`
+                    )}
+                </span>
             </div>
+
+            {loading && (
+                <div className="job-grid">
+                    {Array.from({ length: 6 }).map((_, i) => (
+                        <JobCardSkeleton key={i} />
+                    ))}
+                </div>
+            )}
+
+            {error && <ErrorMessage message={error} onRetry={loadJobs} />}
+
+            {!loading && !error && jobs.length === 0 && (
+                <div
+                    style={{
+                        textAlign: 'center',
+                        padding: '64px 20px',
+                        background: 'var(--surface)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 'var(--radius-lg)'
+                    }}
+                >
+                    <Briefcase size={36} style={{ color: 'var(--text-muted)', marginBottom: 12 }} />
+                    <h3 style={{ marginBottom: 6 }}>No matching positions found</h3>
+                    <p style={{ color: 'var(--text-muted)', fontSize: 14, marginBottom: 20 }}>
+                        Try broadening your keywords or clearing selected filters.
+                    </p>
+                    <button type="button" className="btn btn-secondary" onClick={clearAll}>
+                        Reset all filters
+                    </button>
+                </div>
+            )}
+
+            {!loading && !error && jobs.length > 0 && (
+                <div className="job-grid">
+                    {jobs.map((job) => (
+                        <JobCard
+                            key={job._id}
+                            job={job}
+                            showSave={canSave}
+                            saved={savedMap[job._id]}
+                            onToggleSave={toggleSave}
+                            candidateSkills={user?.skills}
+                        />
+                    ))}
+                </div>
+            )}
+
+            {/* Pagination Controls */}
             {pagination && pagination.totalPages > 1 && (
-                <div className="pagination">
+                <div className="pagination" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12, marginTop: 40 }}>
                     <button
                         type="button"
-                        className="btn btn-secondary"
-                        disabled={!pagination.hasPreviousPage}
+                        className="btn btn-ghost btn-sm"
+                        disabled={!pagination.hasPrevPage}
                         onClick={() => goToPage(pagination.currentPage - 1)}
                     >
-                        Previous
+                        <ChevronLeft size={16} />
+                        <span>Previous</span>
                     </button>
-                    <span>Page {pagination.currentPage} of {pagination.totalPages}</span>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-muted)' }}>
+                        Page {pagination.currentPage} of {pagination.totalPages}
+                    </span>
                     <button
                         type="button"
-                        className="btn btn-secondary"
+                        className="btn btn-ghost btn-sm"
                         disabled={!pagination.hasNextPage}
                         onClick={() => goToPage(pagination.currentPage + 1)}
                     >
-                        Next
+                        <span>Next</span>
+                        <ChevronRight size={16} />
                     </button>
                 </div>
             )}

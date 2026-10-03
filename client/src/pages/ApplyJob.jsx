@@ -1,57 +1,70 @@
 import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, Link } from 'react-router-dom';
+import { ArrowLeft, Send } from 'lucide-react';
 import { applyForJob } from '../services/api';
+import { useToast } from '../context/ToastContext';
+import Button from '../components/ui/Button';
 
 function ApplyJob() {
     const { id } = useParams();
     const navigate = useNavigate();
+    const { success, error: toastError } = useToast();
     const [coverLetter, setCoverLetter] = useState('');
-    const [error, setError] = useState('');
-    const [success, setSuccess] = useState('');
     const [loading, setLoading] = useState(false);
 
     const handleSubmit = async (event) => {
         event.preventDefault();
-        setError('');
-        setSuccess('');
 
         if (!coverLetter.trim()) {
-            setError('Cover letter is required.');
+            toastError('Please write a brief cover letter before submitting.');
             return;
         }
 
         setLoading(true);
         try {
             await applyForJob(id, { coverLetter: coverLetter.trim() });
-            setSuccess('Application submitted successfully.');
-            setTimeout(() => navigate('/my-applications'), 900);
+            success('Application submitted successfully! Tracking stage: Applied.');
+            navigate('/my-applications');
         } catch (err) {
-            setError(err.message);
+            toastError(err.message || 'Failed to submit application');
         } finally {
             setLoading(false);
         }
     };
 
     return (
-        <div className="container section">
-            <form className="form-card" onSubmit={handleSubmit}>
-                <h1>Apply for this job</h1>
-                <p className="muted">The backend will attach your user ID from the JWT. Do not send an applicant ID.</p>
-                {error && <div className="alert alert-error">{error}</div>}
-                {success && <div className="alert alert-success">{success}</div>}
+        <div className="container section" style={{ maxWidth: 640 }}>
+            <div style={{ marginBottom: 20 }}>
+                <Link to={`/jobs/${id}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text-muted)' }}>
+                    <ArrowLeft size={14} /> Back to Job Details
+                </Link>
+            </div>
+
+            <form className="form-card" onSubmit={handleSubmit} style={{ width: '100%' }}>
+                <h1 style={{ fontSize: 24, marginBottom: 6 }}>Submit Application</h1>
+                <p style={{ color: 'var(--text-muted)', fontSize: 14, marginBottom: 24 }}>
+                    Your registered profile information, skills, and resume link will automatically be attached.
+                </p>
+
                 <label>
-                    Cover letter
+                    <span>Cover Letter & Personal Pitch *</span>
                     <textarea
                         rows="8"
                         value={coverLetter}
                         onChange={(event) => setCoverLetter(event.target.value)}
-                        placeholder="Why are you a good fit?"
+                        placeholder="Explain why you're a standout fit for this role, key projects, and your expected contribution..."
                         required
                     />
                 </label>
-                <button type="submit" className="btn btn-primary" disabled={loading}>
-                    {loading ? 'Submitting...' : 'Apply'}
-                </button>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 12 }}>
+                    <Link to={`/jobs/${id}`} className="btn btn-ghost">
+                        Cancel
+                    </Link>
+                    <Button type="submit" loading={loading} icon={Send}>
+                        Submit Application
+                    </Button>
+                </div>
             </form>
         </div>
     );

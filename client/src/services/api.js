@@ -98,6 +98,15 @@ export const getJobApplications = (jobId) =>
 export const updateApplicationStatus = (id, status) =>
     request(`/api/applications/${id}/status`, { method: 'PUT', body: { status }, auth: true });
 
+export const updateApplicationStage = (id, stage) =>
+    request(`/api/applications/${id}/stage`, { method: 'PATCH', body: { stage }, auth: true });
+
+export const addApplicationNote = (id, text) =>
+    request(`/api/applications/${id}/notes`, { method: 'POST', body: { text }, auth: true });
+
+export const deleteApplicationNote = (id, noteId) =>
+    request(`/api/applications/${id}/notes/${noteId}`, { method: 'DELETE', auth: true });
+
 export const getSavedJobs = () =>
     request('/api/saved-jobs', { auth: true });
 
