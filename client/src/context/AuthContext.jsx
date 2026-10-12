@@ -13,8 +13,12 @@ export const useAuth = () => {
 
 export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(() => {
-        const saved = localStorage.getItem('user');
-        return saved ? JSON.parse(saved) : null;
+        try {
+            const saved = localStorage.getItem('user');
+            return saved ? JSON.parse(saved) : null;
+        } catch {
+            return null;
+        }
     });
     const [token, setToken] = useState(() => localStorage.getItem('token'));
 
@@ -42,11 +46,14 @@ export const AuthProvider = ({ children }) => {
         return data.user;
     };
 
+    // Register now returns token directly — no second login call needed
     const register = async (payload) => {
-        await registerUser(payload);
-        return login({ email: payload.email, password: payload.password });
+        const data = await registerUser(payload);
+        persistAuth(data.user, data.token);
+        return data.user;
     };
 
+    // Listen for forced logout events (e.g. 401 from API)
     useEffect(() => {
         const handleLogout = () => logout();
         window.addEventListener('auth:logout', handleLogout);
